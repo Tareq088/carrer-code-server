@@ -30,9 +30,24 @@ async function run() {
     const applicantsCollection = client.db("CareerCode").collection("applicants")
                //jobs API
     app.get("/jobs",async(req,res)=>{
-        const result =await jobsCollection.find().toArray();
+        const email = req.query.email;
+        console.log(email)
+        let query = {};
+        if(email){
+        // query = {hr_email: email};
+        query.hr_email = email;
+        } 
+        const result =await jobsCollection.find(query).toArray();
         res.send(result);
     })
+          // could be done but it should not use
+    // app.get("/jobsByEmailAddress", async(req,res)=>{
+    //   const email = req.query.email;
+    //   const query = {hr_email: email};
+    //   const result = await jobsCollection.find(query).toArray();
+    //   res.send(result)
+      
+    // })
             // fetch one by id
     app.get("/jobs/:id", async(req,res)=>{
         const {id} = req.params;
@@ -40,8 +55,15 @@ async function run() {
         const result = await jobsCollection.findOne(query);
         res.send(result)
     })
+          //post jobs
+    app.post("/jobs", async(req,res)=>{
+      const newJob = req.body;
+      console.log(newJob);
+      const result = await jobsCollection.insertOne(newJob);
+      res.send(result);
+    })
               //applicants
-    app.post("/applicants" ,async(req,res)=>{
+    app.post("/applications" ,async(req,res)=>{
       const application = req.body;
       console.log(application)
       const result = await applicantsCollection.insertOne(application);
