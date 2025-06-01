@@ -18,29 +18,50 @@ app.use(cors({
 }))
 app.use(express.json());
 app.use(cookieParser());
+        //firebase>>settings symbol(gear)>> project settings>>service accounts >> firebase admin sdk
+var admin = require("firebase-admin");
+var serviceAccount = require('./firebase-admin-key.json');
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+});
       //middleware check kori
 const  logger = (req, res, next) =>{
   console.log("inside the logger middleware");
   next();
 }
+                   //verify token
 const verifyToken = (req,res,next) =>{
   //kare verify korbo, cookies re, taile cookies re age ante/paite hbe
   const token = req?.cookies?.token;
   console.log("cookie in the middleware: ",token);
+            // token na thakle bari jao
   if(!token){
     return res.status(401).send({message: "Unauthorized"});
   }
-  jwt.verify(token, process.env.JWT_ACCESS_SECRET,(error, decode)=>{
+  jwt.verify(token, process.env.JWT_ACCESS_SECRET,(error, decoded)=>{
     if(error){
       return res.status(401).send({message:"unauthorized access"});
     }
-    console.log("decode here:", decode);
-    req.decoded = decode;
+    console.log("decode here:", decoded);
+            // req er moddhe dichi karon ei middle ware ke jekhane user kortechi sekahne req te pabo
+    req.decoded = decoded;
      next()
   })
- 
 }
-
+                    // verify Firbase token
+const verifyFirebaseToken = async(req,res,next) =>{
+  const authHeader = req.headers.authorization;
+  const token = authHeader.split(' ')[1];
+  console.log("firebase token", token);
+  if(!token){
+    return res.status(401).send({message: "unauthorized"});
+  }
+  const userInfo = await admin.auth().verifyIdToken(token);
+  console.log("inside the token", userInfo);
+      //req er moddhe dichi karon ei middle ware ke jekhane use kortechi sekhane req te pabo
+  req.tokenEmail - userInfo.email;
+  next();
+}
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.taikvqz.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
@@ -122,11 +143,16 @@ async function run() {
       res.send(result);
     })
                 //job applications related apis
-    app.get("/applications", logger, verifyToken, async(req,res)=>{
+    app.get("/applications", logger, verifyToken, verifyFirebaseToken, async(req,res)=>{
       const email = req.query.email;
+              // token verify
       console.log('inside applications api',req.cookies);
       if(email !== req.decoded.email){
-        return res.status(403).send({message: "forbidden access"})
+        return res.status(403).send({message: "forbidden access"});
+      }
+            // firebase token verify here
+      if(req.tokenEmail !== email){
+        return res.status(403).send({message:"forbidden access"});
       }
       // console.log(req.query)
       // console.log(email);
