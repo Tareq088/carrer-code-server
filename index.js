@@ -1,6 +1,7 @@
 require('dotenv').config()
 const express = require("express");
 const cors = require("cors");
+const jwt = require('jsonwebtoken');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const app = express();
 const port = process.env.PORT || 5000;
@@ -24,10 +25,18 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
+    // await client.connect();
     // Send a ping to confirm a successful connection
     const jobsCollection = client.db('CareerCode').collection("Jobs");
-    const applicantsCollection = client.db("CareerCode").collection("applicants")
+    const applicantsCollection = client.db("CareerCode").collection("applicants");
+          //jwt token related api
+    app.post('/jwt',async(req,res)=>{
+      const{email} = req.body;
+      const user = {email}
+              // token generate korbo ekhon
+      const token = jwt.sign(user,'secret',{expiresIn:'1h'});
+      res.send({token})
+    })
                //jobs API
     app.get("/jobs",async(req,res)=>{
         const email = req.query.email;
@@ -62,19 +71,23 @@ async function run() {
       const result = await jobsCollection.insertOne(newJob);
       res.send(result);
     })
-              //applicants
-    app.post("/applications" ,async(req,res)=>{
-      const application = req.body;
-      console.log(application)
-      const result = await applicantsCollection.insertOne(application);
+            //particular ekta job er jonno joto application ache ta dao
+    app.get("/applications/job/:job_id",async(req,res)=>{
+      const job_id= req.params.job_id;
+      console.log(job_id)
+      const query = {jobId: job_id};
+      const result = await applicantsCollection.find(query).toArray();
       res.send(result);
-    }) 
-                  //job applications related apis
+    })
+                //job applications related apis
     app.get("/applications", async(req,res)=>{
       const email = req.query.email;
       console.log(req.query)
-      console.log(email)
-      const query = {applicant: email};
+      console.log(email);
+      let query ={};
+      if(email){
+        query = {applicant: email};
+      }
       const result = await applicantsCollection.find(query).toArray();
             //bad way to get aggregate data
       for(const application of result){
@@ -87,8 +100,28 @@ async function run() {
       }
       res.send(result);
     })
-
-    // await client.db("admin").command({ ping: 1 });
+                      //applicants
+    app.post("/applications" ,async(req,res)=>{
+      const application = req.body;
+      console.log(application);
+      const result = await applicantsCollection.insertOne(application);
+      res.send(result);
+    }) 
+            // patch diye update korbo data
+    app.patch("/applications/:id",async(req,res)=>{
+      const id = req.params.id;
+      const filter = {_id: new ObjectId(id)};
+      const options ={upsert: true};
+      const updatedDoc ={
+        $set:{
+          status: req.body.status,
+        }
+      };
+      const result = await applicantsCollection.updateOne(filter, updatedDoc, options);
+      res.send(result)
+    })
+                 
+            // await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
   } finally {
     // Ensures that the client will close when you finish/error
