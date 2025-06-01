@@ -2,13 +2,44 @@ require('dotenv').config()
 const express = require("express");
 const cors = require("cors");
 const jwt = require('jsonwebtoken');
+const cookieParser = require('cookie-parser')
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const app = express();
 const port = process.env.PORT || 5000;
 
             // middleWare
-app.use(cors());
+// app.use(cors({
+//   origin:['http://localhost:5173'], // array karon: local host, web server, production URL theke onek somoy data nite hoy
+//   credentials:true // allow credentials
+// }));
+app.use(cors({
+  origin:['http://localhost:5173'],
+  credentials: true // jate tumi cookies niye handle koro
+}))
 app.use(express.json());
+app.use(cookieParser());
+      //middleware check kori
+const  logger = (req, res, next) =>{
+  console.log("inside the logger middleware");
+  next();
+}
+const verifyToken = (req,res,next) =>{
+  //kare verify korbo, cookies re, taile cookies re age ante/paite hbe
+  const token = req?.cookies?.token;
+  console.log("cookie in the middleware: ",token);
+  if(!token){
+    return res.status(401).send({message: "Unauthorized"});
+  }
+  jwt.verify(token, process.env.JWT_ACCESS_SECRET,(error, decode)=>{
+    if(error){
+      return res.status(401).send({message:"unauthorized access"});
+    }
+    console.log("decode here:", decode);
+    req.decoded = decode;
+     next()
+  })
+ 
+}
 
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.taikvqz.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
@@ -29,13 +60,24 @@ async function run() {
     // Send a ping to confirm a successful connection
     const jobsCollection = client.db('CareerCode').collection("Jobs");
     const applicantsCollection = client.db("CareerCode").collection("applicants");
-          //jwt token related api
-    app.post('/jwt',async(req,res)=>{
-      const{email} = req.body;
-      const user = {email}
-              // token generate korbo ekhon
-      const token = jwt.sign(user,'secret',{expiresIn:'1h'});
-      res.send({token})
+          // module 60.2 jwt token related api
+    // app.post('/jwt',async(req,res)=>{
+    //   const{email} = req.body;
+    //   const user = {email}
+    //           // token generate korbo ekhon
+    //   const token = jwt.sign(user,process.env.JWT_ACCESS_SECRET,{expiresIn:'1h'});
+    //   res.send({token})
+    // })
+        // module 60.4: jwt token related api
+    app.post("/jwt", async(req,res)=>{
+      const userData = req.body;
+      const token = jwt.sign(userData, process.env.JWT_ACCESS_SECRET, {expiresIn:'1d'});
+              //send token to the cookies(prothome name, token value, options)
+      res.cookie('token', token,{
+        httpOnly: true,
+        secure: false ,// ekhon productio e use korchi na tai false emni hbe. tai false diye rakhlam
+      })
+      res.send({success: true});
     })
                //jobs API
     app.get("/jobs",async(req,res)=>{
@@ -80,10 +122,14 @@ async function run() {
       res.send(result);
     })
                 //job applications related apis
-    app.get("/applications", async(req,res)=>{
+    app.get("/applications", logger, verifyToken, async(req,res)=>{
       const email = req.query.email;
-      console.log(req.query)
-      console.log(email);
+      console.log('inside applications api',req.cookies);
+      if(email !== req.decoded.email){
+        return res.status(403).send({message: "forbidden access"})
+      }
+      // console.log(req.query)
+      // console.log(email);
       let query ={};
       if(email){
         query = {applicant: email};
